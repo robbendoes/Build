@@ -1,0 +1,44 @@
+# rob
+set -e
+host=`hostname`
+svc="Check_UMTS"
+nsca_host="10.112.132.33"
+nsca_bin="/usr/sbin/send_nsca"
+nsca_cfg="/etc/nagios/send_nsca.cfg"
+wget_log="/share/MD0_DATA/.qpkg/nsca/wget-log"
+
+if [ -f $wget_log ] ; then
+ rm $wget_log
+fi
+
+wget -o $wget_log --no-dns-cache -4  --no-cache  --no-cookies  --no-check-certificate --delete-after http://androidnetworktester.googlecode.com/files/100kb.txt
+que=`cat $wget_log | grep -i "100kb.txt' saved" | awk '{ print $3 }' | cut -d "(" -f2`
+que1="'speed'=$que;50;5"
+result=`traceroute -n -m 3 google.nl | grep 10.17 | awk '{ print $2 }' | cut -d "." -f1,2,3`
+
+if [[ $result == "10.17.6" ]]; then
+ result="Vodafone: speed $que kb/s"
+ return_code=0
+fi
+if  [[ $result == "10.17.2" ]]; then
+   result="Vodafone: speed $que kb/s"
+   return_code=0
+fi
+if [[ $result == "10.17.7" ]]; then
+   result="KPN: speed $que kb/s"
+   return_code=1
+fi
+if [[ $result == "10.17.3" ]]; then
+   result="KPN: speed $que kb/s"
+   return_code=1
+fi
+if [[ $result == "10.17.4" ]]; then
+   result="VSAT: speed $que kb/s"
+   return_code=1
+fi
+if [[ $result == "0.0.0" ]]; then
+   result="No Internet"
+   return_code=2
+fi
+
+exitstatus=`/bin/echo -e "$host\t$svc\t$return_code\t$result|$que1\n" | $nsca_bin -H $nsca_host -c $nsca_cfg`
