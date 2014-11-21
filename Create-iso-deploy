@@ -1,0 +1,173 @@
+########## Parameters
+ISO_TITLE=centos-ui-base-20141014
+
+ISO_URL=http://ftp.tudelft.nl/centos.org/6.5/isos/x86_64/
+ISO_NAME=CentOS-6.5-x86_64-minimal.iso
+
+
+########## preparation
+
+# create working directory
+mkdir -p ~/autoiso/workspace
+cd ~/autoiso
+
+
+
+
+########## part II:	create the working directory
+echo -create workspace directory
+
+
+# copy ISO files from distro to working directory
+echo --copying isofiles to workspace
+cp -r /media/* ~/autoiso/workspace
+cp /media/.treeinfo ~/autoiso/workspace
+cp /media/.discinfo ~/autoiso/workspace
+umount /media
+
+
+######### part III:	modify the installation 
+echo -modify installati# add menu option ’Unattended Install’ to isolinux.cfg 
+cat workspace/isolinux/isolinux.cfg | sed 's/label linux/label unattended\n  menu label ^Unattended Install\n  menu default\n  kernel vmlinuz\n  append ks=cdrom:\/isolinux\/ui\/ks.cfg initrd=initrd.img\nlabel linux/' | sed 's/timeout 600/timeout 100/'>workspace/isolinux/isolinux.new
+mv workspace/isolinux/isolinux.new workspace/isolinux/isolinux.cfg
+
+# create UnattendedInstall directory
+mkdir workspace/isolinux/ui
+
+
+###### add scripts to workspace
+echo -add autoinstall scripts to workspace
+### ks.cfg script
+cat > workspace/isolinux/ui/ks.cfg <<EOF
+install
+cdrom
+lang en_US.UTF-8
+keyboard us
+network --onboot yes --device eth0 --bootproto dhcp --noipv6
+rootpw  --iscrypted \$6\$FBQPi036Fv4g1JtZ\$HolLsXBm0O/tN7nQ5YqAZrSKVttggKA2IV1ifiIrUQ8DtfGbGuQQExJ.WmuT5zo9dMJVS66Wer63myWX0JyD..
+firewall --service=ssh
+authconfig --enableshadow --passalgo=sha512
+selinux --enforcing
+timezone --utc Europe/Amsterdam
+bootloader --location=mbr --driveorder=sda --append="crashkernel=auto rhgb quiet"
+
+# first, remove invalid partition table
+zerombr
+clearpart --all
+
+part /boot --fstype=ext4 --asprimary --size=250
+part pv.008002 --grow --asprimary --size=5
+
+volgroup vg_01 --pesize=4096 pv.008002
+logvol /var --fstype=ext4 --name=vol01 --vgname=vg_01 --size=4132
+logvol / --fstype=ext4 --name=root --vgname=vg_01 --size=10000
+logvol swap --name=swap --vgname=vg_01 --size=2000
+
+# reboot the machine after installation
+reboot
+
+%packages --nobase
+@core
+
+%post --log=/root/ks-post.log
+
+# mount CDROM to copy postinstallation files
+mkdir /opt/cdrom
+mount /dev/cdrom /opt/cdrom
+
+# copy unattended install scripts to /root
+cp -r /opt/cdrom/isolinux/ui/ /
+umount /dev/cdrom
+
+# move firstboot service
+# (postinstall will be started on next boot)
+mv /ui/firstboot /etc/init.d/
+chkconfig firstboot on
+
+%end
+EOF
+
+
+### firstboot script
+cat > workspace/isolinux/ui/firstboot <<EOF
+#!/bin/bash
+# chkconfig: 2345 90 10
+
+case "\$1" in
+  start)
+    /ui/postinstall
+    rm -rf /ui
+    chkconfig --del firstboot
+  ;;
+  stop|status|restart|reload|force-reload)
+    # do nothing
+  ;;
+esac
+EOF
+chmod +x workspace/isolinux/ui/firstboot
+
+### postinstall script
+cat > workspace/isolinux/ui/postinstall <<EOF
+#!/bin/bash
+
+# install common tools
+yum install -y man mlocate  mkisofs
+# install network services
+yum install -y ntp
+# install network tools
+yum install -y jwhois bind-utils nmap tcpdump
+# add repoforge to install arp-scan
+yum install -y http://pkgs.repoforge.org/rpmforge-release/rpmforge-release-0.5.3-1.el6.rf.x86_64.rpm
+yum install -y arp-scan
+#install network applications
+yum install -y wget telnet lftp httpd nfs-utils
+
+
+## log all commands typed in by a user
+
+# for new users
+cat >> /etc/skel/.bashrc <<EOF2
+export PROMPT_COMMAND='RETRN_VAL=\\\$?;logger -p local6.debug "\\\$(whoami) [\\\$\\\$]: \\\$(history 1 | sed "s/^[ ]*[0-9]\+[ ]*//" ) [\\\$RETRN_VAL]"'
+EOF2
+
+# for the current user
+cat >> ~/.bashrc <<EOF2
+export PROMPT_COMMAND='RETRN_VAL=\\\$?;logger -p local6.debug "\\\$(whoami) [\\\$\\\$]: \\\$(history 1 | sed "s/^[ ]*[0-9]\+[ ]*//" ) [\\\$RETRN_VAL]"'
+EOF2
+
+# log commands to separate file
+echo "local6.*                /var/log/cmdlog.log">>/etc/rsyslog.conf
+service rsyslog restart
+
+# install EPEL repo
+wget http://download.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm
+rpm -ivh epel-release-6-8.noarch.rpm
+rm -f epel-release-6-8.noarch.rpm
+
+# install VMware tools
+yum -y install http://packages.vmware.com/tools/esx/5.5p02/repos/vmware-tools-repo-RHEL6-9.4.6-1.el6.x86_64.rpm
+yum install -y vmware-tools-esx-nox
+
+## update all packages (must be last command before reboot)
+yum update -y
+reboot
+
+EOF
+chmod +x workspace/isolinux/ui/postinstall
+
+
+########## part IV:	create the new ISO
+echo -create iso file
+
+mkisofs -r -T -J -V “CentOS6” -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table -o $ISO_TITLE.iso ~/autoiso/workspace/
+
+
+########## part V:	cleanup workspace
+echo -cleanup workspace
+
+# delete workspace
+rm -rf workspace
+
+# show result
+pwd
+ls -la ~/autoiso
