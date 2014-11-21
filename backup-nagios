@@ -1,0 +1,137 @@
+The authenticity of host '10.112.132.33 (10.112.132.33)' can't be established.
+RSA key fingerprint is 09:c8:68:e6:61:92:a6:01:22:e6:27:7b:8c:83:b7:f3.
+Are you sure you want to continue connecting (yes/no)? yes
+Warning: Permanently added '10.112.132.33' (RSA) to the list of known hosts.
+root@10.112.132.33's password: 
+Last login: Fri Nov 21 07:13:40 2014 from 10.112.132.20
+[root@SKA-S000002 ~]# cat /etc/sysconfig/backup_server_nagios.sh 
+#!/bin/bash
+# Backup script for Nagios 
+# Created 06-12-2013 by Robbie
+name="/etc/sysconfig/backup_server_nagios.sh"
+thedate=`date +%m%d%y%H%M`
+log="/var/log/backup_nagios_${thedate}.log"
+touch $log
+basedir="/var/www/html"
+backup_dir="${basedir}/repository/backup_nagios"
+path_nagios="/usr/local/nagios"
+mysqlchecker="/usr/bin/mysqlcheck -c -f --auto-repair -A -u root -ptest123"
+mysqldump="/usr/bin/mysqldump"
+options="--all-databases -l -u root -ptest123" 
+path_nagmap="${basedir}/nagmap"
+path_nagiosql="${basedir}/nagiosql"
+files_nsca="/usr/local/etc/nsca.cfg /usr/local/etc/send_nsca.cfg"
+to="tar -zcvf"
+tee="tee -a ${log}"
+lockfile="/var/run/nagios_backup.lock"
+clean_mysql="mysql -u root -ptest123 --database nagios < /usr/share/mysql/mysql_mainenance.sql"
+mount="mount -t cifs -o username=adm-ska-jonghr,password=Warmond.11,domain=ad.rws.nl //145.45.8.172/f$ ${basedir}/repository/jumpserver/"
+umount="umount ${basedir}/repository/jumpserver"
+stopall="/etc/init.d/nagios_all stop"
+startall="/etc/init.d/nagios_all start"
+
+
+create_lockfile () {
+        if [ -f $lockfile ]; then
+         ps aux | grep -v grep | grep -v $$ | grep $name  > /dev/null
+	  result=$?
+            if [ ${result} ==  "0" ]; then
+             echo "program still running"
+            exit 1
+            else
+             echo "program is dead, starting new one"
+	     echo > $lockfile 
+           fi
+        else
+         touch $lockfile
+        fi
+}
+create_pid () {
+	echo $$ > $lockfile
+}
+mkdirs () {
+	if [ ! -d $backup_dir ]; then
+	 mkdir $backup_dir | $tee
+	fi
+}
+tar_nagios () {
+	if [ -d $path_nagios ]; then
+	 $to $backup_dir/nagios_core._${thedate}.tar $path_nagios | $tee
+	fi 
+}
+dump_mysql () {
+	if [ -f $mysqldump ]; then 
+	 $clean_mysql 
+	 $mysqlchecker 
+	 $mysqldump $options  > $backup_dir/all_databases_${thedate}.nagios.sql 
+	fi
+}
+tar_nagmap () {
+	if [ -d $path_nagmap ]; then 
+	 $to $backup_dir/nagmap_${thedate}.tar $path_nagmap | $tee
+	fi 
+}
+tar_nagiosql () {
+	if [ -d $path_nagiosql ]; then 
+	 $to $backup_dir/nagiosql_${thedate}.tar $path_nagiosql | $tee
+	fi 
+}
+tar_nsca () {
+         $to $backup_dir/nsca_${thedate}.tar $files_nsca | $tee
+}
+clean_old_backup_files () {
+	if [ -d $backup_dir ]; then
+	 find $backup_dir -iname "*.tar" -ctime +2 -exec rm {} \; | $tee
+	 find $backup_dir -iname "*.sql" -ctime +2 -exec rm {} \; | $tee
+	fi 
+	if [ -d $path_nagios/var/archives ]; then 
+	 find $path_nagios/var/archives -type f -iname "*.log" -mtime +10 -exec rm {} \; | $tee
+	fi
+	if [ -d $path_nagios/etc/backup ]; then
+	 find $path_nagios/etc/backup -type f -iname "*.log" -mtime +10 -exec rm {} \; | $tee
+	 find $path_nagios/etc/backup -type f -iname "*_old_*" -mtime +10 -exec rm {} \; | $tee
+	fi 
+}
+
+Amnt () {
+	mount -t cifs -o username=adm-ska-jonghr,password=Wassenaar.11,domain=ad.rws.nl //145.45.8.172/f$ /var/www/html/repository/jumpserver/
+}
+
+Bmnt () {
+	umount /var/www/html/repository/jumpserver/
+}
+
+copy_to_jumpserver () {
+ 	if [ -d ${basedir}/repository/jumpserver ] ; then 
+	cp -rp $backup_dir/* ${basedir}/repository/jumpserver/backup_nagios
+ 	fi 
+}
+
+
+rm_lockfile () {
+	if [ -f $lockfile ]; then
+	 rm $lockfile
+	fi
+}
+send_log () {
+	if [ -f $log ]; then
+	 cp $log $backup_dir 
+	fi
+}
+
+$stopall
+create_lockfile
+create_pid
+mkdirs
+tar_nagios
+dump_mysql
+tar_nagmap
+tar_nagiosql
+tar_nsca
+clean_old_backup_files
+Amnt
+copy_to_jumpserver
+Bmnt
+rm_lockfile
+$startall
+send_log 
