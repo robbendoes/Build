@@ -793,7 +793,7 @@ perl -pe 's/RHNS-CA-CERT/RHN-ORG-TRUSTED-SSL-CERT/g' -i /etc/sysconfig/rhn/up2da
 
 mkdir -p /tmp/rhn_rpms/optional
 cd /tmp/rhn_rpms/optional 
-wget -P /tmp/rhn_rpms/optional http://bla.bla/download/package/36f989d149a72b88f49c4b8b574864f856a8aa23/0/363/94861/pyOpenSSL-0.13.1-3.el7.x86_64.rpm http://srtafinf0004.insim.biz/download/package/2bfb76c1a7ef137ac3ce5d4b40c4db8220cb0ef6/0/363/90349/libxml2-2.9.1-6.el7_2.3.x86_64.rpm http://srtafinf0004.insim.biz/download/package/dcda5c07749b64dfbb68273295e605b318311b92/0/363/90352/libxml2-python-2.9.1-6.el7_2.3.x86_64.rpm http://srtafinf0004.insim.biz/download/package/abf04f4f6ff570426e9743e5b7860a0c335375aa/0/363/95850/rhnlib-2.5.65-2.el7.noarch.rpm 
+wget -P /tmp/rhn_rpms/optional http://bla.bla/download/package/pyOpenSSL-0.13.1-3.el7.x86_64.rpm 
 rpm -Uvh --replacepkgs --replacefiles /tmp/rhn_rpms/optional/pyOpenSSL* /tmp/rhn_rpms/optional/rhnlib* /tmp/rhn_rpms/optional/libxml2-python* /tmp/rhn_rpms/optional/libxml2* 
 perl -npe 's|^(\s*(noSSLS\|s)erverURL\s*=\s*[^:]+://)[^/]*/|${1}bla.bla/|' -i /etc/sysconfig/rhn/up2date
 mkdir -p /etc/sysconfig/rhn/allowed-actions/script
@@ -816,12 +816,12 @@ echo "Kickstarted on $(date +'%Y-%m-%d')" >> /etc/motd
 
 # begin Red Hat management server registration
 mkdir -p /usr/share/rhn/
-wget http://srtafinf0004.insim.biz/pub/RHN-ORG-TRUSTED-SSL-CERT -O /usr/share/rhn/RHN-ORG-TRUSTED-SSL-CERT   
+wget http://blabla/pub/RHN-ORG-TRUSTED-SSL-CERT -O /usr/share/rhn/RHN-ORG-TRUSTED-SSL-CERT   
 perl -Xnpe 's/RHNS-CA-CERT/RHN-ORG-TRUSTED-SSL-CERT/g' -i /etc/sysconfig/rhn/*  
 if [ -f /etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release ]; then
     rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
 fi
-key=1-244570f90bdc70144d16a50bfc1f3990,1-redhat7-key
+key=1-,1-redhat7-key
 if [ -f /tmp/key ]; then
     key=`cat /tmp/key`,$key
 fi
@@ -942,7 +942,7 @@ echo  " rundir = /var/run/puppet" >> $puppetconfig
 echo 'ssldir = $vardir/ssl' >> $puppetconfig
 
 echo "certname = $hostname" >> $puppetconfig
-echo  "server = puppet.insim.biz" >> $puppetconfig
+echo  "server = puppet.blabla" >> $puppetconfig
 
 echo "[agent] "  >> $puppetconfig
 echo  "report = true " >> $puppetconfig
